@@ -34,7 +34,7 @@ Content Script     →  render widget on claude.ai
 ## Installation
 
 ### From Firefox Add-ons (AMO)
-*Coming soon — submission in progress.*
+Just click on the .xpi file to install the addon.
 
 ### Manual (Developer / Temporary)
 1. Clone or download this repository
