@@ -1,0 +1,364 @@
+'use strict';
+
+const STATUS_COLOR = {
+  major_outage: 'red',
+  partial_outage: 'orange',
+  degraded_performance: 'orange',
+  under_maintenance: 'gray',
+  operational: 'green',
+};
+
+const STATUS_PRIORITY = {
+  major_outage: 4,
+  partial_outage: 3,
+  degraded_performance: 2,
+  under_maintenance: 1,
+  operational: 0,
+};
+
+const LABELS = {
+  de: {
+    components: 'Komponenten',
+    activeIncidents: 'Aktive Vorfälle',
+    scheduledMaint: 'Geplante Wartung',
+    recentIncidents: 'Letzte Vorfälle',
+    noIncidents: 'Keine aktuellen Vorfälle',
+    noMaintenance: 'Keine geplanten Wartungen',
+    noHistory: 'Keine aufgelösten Vorfälle in den letzten 7 Tagen',
+    loading: 'Wird geladen…',
+    error: 'Daten nicht verfügbar',
+    lastChecked: (t) => `Zuletzt geprüft: ${t} Uhr`,
+    impact: { major: 'Kritisch', minor: 'Gering', maintenance: 'Wartung', none: '' },
+    incidentStatus: {
+      investigating: 'Wird untersucht',
+      identified: 'Identifiziert',
+      monitoring: 'Monitoring',
+      resolved: 'Behoben',
+      postmortem: 'Postmortem',
+    },
+    maintStatus: {
+      scheduled: 'Geplant',
+      in_progress: 'Läuft',
+      completed: 'Abgeschlossen',
+    },
+    compStatus: {
+      major_outage: 'Komplettausfall',
+      partial_outage: 'Teilausfall',
+      degraded_performance: 'Eingeschränkt',
+      under_maintenance: 'Wartung',
+      operational: 'Betrieb normal',
+    },
+    duration: (mins) => {
+      if (mins < 60) return `${mins} Min.`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return m > 0 ? `${h} Std. ${m} Min.` : `${h} Std.`;
+    },
+    ago: (mins) => {
+      if (mins < 2) return 'gerade eben';
+      if (mins < 60) return `vor ${mins} Min.`;
+      const h = Math.floor(mins / 60);
+      return `vor ${h} Std.`;
+    },
+  },
+  en: {
+    components: 'Components',
+    activeIncidents: 'Active Incidents',
+    scheduledMaint: 'Scheduled Maintenance',
+    recentIncidents: 'Recent Incidents',
+    noIncidents: 'No active incidents',
+    noMaintenance: 'No scheduled maintenance',
+    noHistory: 'No resolved incidents in the last 7 days',
+    loading: 'Loading…',
+    error: 'Data unavailable',
+    lastChecked: (t) => `Last checked: ${t}`,
+    impact: { major: 'Major', minor: 'Minor', maintenance: 'Maintenance', none: '' },
+    incidentStatus: {
+      investigating: 'Investigating',
+      identified: 'Identified',
+      monitoring: 'Monitoring',
+      resolved: 'Resolved',
+      postmortem: 'Postmortem',
+    },
+    maintStatus: {
+      scheduled: 'Scheduled',
+      in_progress: 'In Progress',
+      completed: 'Completed',
+    },
+    compStatus: {
+      major_outage: 'Major Outage',
+      partial_outage: 'Partial Outage',
+      degraded_performance: 'Degraded',
+      under_maintenance: 'Maintenance',
+      operational: 'Operational',
+    },
+    duration: (mins) => {
+      if (mins < 60) return `${mins}m`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    },
+    ago: (mins) => {
+      if (mins < 2) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
+      const h = Math.floor(mins / 60);
+      return `${h}h ago`;
+    },
+  },
+};
+
+let currentLang = 'de';
+let cachedResponse = null;
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function minutesAgo(dateStr) {
+  return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000));
+}
+
+function formatDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString(
+    currentLang === 'de' ? 'de-DE' : 'en-US',
+    { day: '2-digit', month: '2-digit', year: 'numeric' }
+  );
+}
+
+function formatTimeRange(fromStr, toStr) {
+  const opts = { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' };
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-US';
+  return `${new Date(fromStr).toLocaleTimeString(locale, opts)} – ${new Date(toStr).toLocaleTimeString(locale, opts)} UTC`;
+}
+
+function getOverallColor(components) {
+  let maxPriority = -1;
+  let worstStatus = 'operational';
+  for (const c of components) {
+    if (c.group) continue;
+    const p = STATUS_PRIORITY[c.status] ?? 0;
+    if (p > maxPriority) { maxPriority = p; worstStatus = c.status; }
+  }
+  return STATUS_COLOR[worstStatus] ?? 'gray';
+}
+
+// ── Render functions ─────────────────────────────────────────
+
+function renderComponents(components) {
+  const L = LABELS[currentLang];
+  const container = document.getElementById('p-components');
+  container.replaceChildren();
+  const visible = components.filter((c) => !c.group);
+  for (const c of visible) {
+    const row = el('div', 'p-component-row');
+    row.append(
+      el('span', `p-dot p-${STATUS_COLOR[c.status] ?? 'gray'}`),
+      el('span', 'p-comp-name', c.name),
+      el('span', 'p-comp-status', L.compStatus[c.status] ?? c.status)
+    );
+    container.appendChild(row);
+  }
+}
+
+function renderActiveIncidents(incidents) {
+  const L = LABELS[currentLang];
+  const container = document.getElementById('p-active-incidents');
+  const countEl = document.getElementById('p-active-count');
+  container.replaceChildren();
+
+  countEl.textContent = incidents.length;
+  countEl.style.display = incidents.length ? 'inline' : 'none';
+
+  if (!incidents.length) {
+    container.appendChild(el('div', 'p-empty', L.noIncidents));
+    return;
+  }
+
+  for (const inc of incidents) {
+    const card = el('div', `p-incident-card p-incident-${inc.impact}`);
+
+    const header = el('div', 'p-incident-header');
+    const impactLabel = L.impact[inc.impact];
+    header.append(
+      el('span', 'p-incident-name', inc.name),
+      ...(impactLabel ? [el('span', `p-badge p-impact-${inc.impact}`, impactLabel)] : [])
+    );
+
+    const meta = el('div', 'p-incident-meta');
+    meta.append(
+      el('span', 'p-incident-status', L.incidentStatus[inc.status] ?? inc.status),
+      el('span', 'p-incident-time', L.ago(minutesAgo(inc.started_at)))
+    );
+
+    card.append(header, meta);
+
+    if (inc.incident_updates?.length) {
+      card.appendChild(el('div', 'p-incident-update', inc.incident_updates[0].body));
+    }
+
+    container.appendChild(card);
+  }
+}
+
+function renderScheduledMaintenance(maintenances) {
+  const L = LABELS[currentLang];
+  const container = document.getElementById('p-maintenance');
+  const countEl = document.getElementById('p-maint-count');
+  container.replaceChildren();
+
+  const active = maintenances.filter((m) => m.status === 'scheduled' || m.status === 'in_progress');
+  countEl.textContent = active.length;
+  countEl.style.display = active.length ? 'inline' : 'none';
+
+  if (!active.length) {
+    container.appendChild(el('div', 'p-empty', L.noMaintenance));
+    return;
+  }
+
+  for (const m of active) {
+    const card = el('div', 'p-maint-card');
+
+    const header = el('div', 'p-maint-header');
+    header.append(
+      el('span', 'p-maint-name', m.name),
+      el('span', 'p-badge p-maint-status-badge', L.maintStatus[m.status] ?? m.status)
+    );
+
+    card.appendChild(header);
+
+    if (m.scheduled_for && m.scheduled_until) {
+      const time = el('div', 'p-maint-time');
+      time.textContent = `${formatDate(m.scheduled_for)} · ${formatTimeRange(m.scheduled_for, m.scheduled_until)}`;
+      card.appendChild(time);
+    }
+
+    container.appendChild(card);
+  }
+}
+
+function renderHistory(allIncidents) {
+  const L = LABELS[currentLang];
+  const container = document.getElementById('p-history');
+  container.replaceChildren();
+
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = allIncidents
+    .filter((i) => i.status === 'resolved' && new Date(i.resolved_at).getTime() > sevenDaysAgo)
+    .slice(0, 5);
+
+  if (!recent.length) {
+    container.appendChild(el('div', 'p-empty', L.noHistory));
+    return;
+  }
+
+  for (const inc of recent) {
+    const row = el('div', 'p-history-row');
+
+    const durationMins = Math.round(
+      (new Date(inc.resolved_at).getTime() - new Date(inc.started_at).getTime()) / 60000
+    );
+
+    const meta = el('div', 'p-history-meta');
+    meta.append(
+      el('span', 'p-history-date', formatDate(inc.resolved_at)),
+      el('span', 'p-history-sep', '·'),
+      el('span', 'p-history-duration', L.duration(durationMins))
+    );
+
+    row.append(
+      el('span', 'p-history-check', '✓'),
+      el('span', 'p-history-name', inc.name),
+      meta
+    );
+    container.appendChild(row);
+  }
+}
+
+function renderAll(summaryData, incidentsData) {
+  const L = LABELS[currentLang];
+  const components = summaryData.components ?? [];
+  const activeIncidents = summaryData.incidents ?? [];
+  const maintenances = summaryData.scheduled_maintenances ?? [];
+  const allIncidents = incidentsData?.incidents ?? [];
+
+  // Header dot: red/orange if active incident, otherwise worst component color
+  const overallColor = activeIncidents.length > 0
+    ? (activeIncidents.some((i) => i.impact === 'major') ? 'red' : 'orange')
+    : getOverallColor(components);
+  document.getElementById('p-dot').className = `p-dot p-${overallColor}`;
+
+  renderComponents(components);
+  renderActiveIncidents(activeIncidents);
+  renderScheduledMaintenance(maintenances);
+  renderHistory(allIncidents);
+
+  // Section titles (for language switching)
+  document.getElementById('p-components-title').textContent = L.components;
+  document.getElementById('p-active-title').textContent = L.activeIncidents;
+  document.getElementById('p-maint-title').textContent = L.scheduledMaint;
+  document.getElementById('p-history-title').textContent = L.recentIncidents;
+
+  const time = new Date().toLocaleTimeString(
+    currentLang === 'de' ? 'de-DE' : 'en-US',
+    { hour: '2-digit', minute: '2-digit' }
+  );
+  document.getElementById('p-timestamp').textContent = L.lastChecked(time);
+}
+
+function updateLangUI() {
+  document.getElementById('p-lang-flag').textContent = currentLang === 'de' ? '🇩🇪' : '🇺🇸';
+  document.querySelectorAll('.p-lang-option').forEach((o) =>
+    o.classList.toggle('active', o.dataset.lang === currentLang)
+  );
+}
+
+function requestAndRender() {
+  chrome.runtime.sendMessage({ type: 'GET_SUMMARY' }, (response) => {
+    if (chrome.runtime.lastError || !response) {
+      document.getElementById('p-components').textContent = LABELS[currentLang].error;
+      return;
+    }
+    cachedResponse = response;
+    renderAll(response.summary ?? {}, response.incidents ?? {});
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────
+
+chrome.storage.local.get(['csm-lang'], (stored) => {
+  if (stored['csm-lang']) currentLang = stored['csm-lang'];
+  updateLangUI();
+  document.getElementById('p-components').appendChild(
+    el('div', 'p-empty', LABELS[currentLang].loading)
+  );
+  requestAndRender();
+});
+
+// ── Language switching ────────────────────────────────────────
+
+document.getElementById('p-lang-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('p-lang-menu').classList.toggle('open');
+});
+
+document.querySelectorAll('.p-lang-option').forEach((opt) => {
+  opt.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const lang = opt.dataset.lang;
+    document.getElementById('p-lang-menu').classList.remove('open');
+    if (lang === currentLang) return;
+    currentLang = lang;
+    chrome.storage.local.set({ 'csm-lang': lang });
+    updateLangUI();
+    if (cachedResponse) renderAll(cachedResponse.summary ?? {}, cachedResponse.incidents ?? {});
+  });
+});
+
+document.addEventListener('click', () => {
+  document.getElementById('p-lang-menu').classList.remove('open');
+});
