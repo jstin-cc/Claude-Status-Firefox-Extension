@@ -5,7 +5,7 @@ A Firefox and Chrome extension that displays the real-time operational status of
 ![Firefox](https://img.shields.io/badge/Firefox-140%2B-orange?logo=firefox)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-blue?logo=googlechrome)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
-![Version](https://img.shields.io/badge/Version-2.1-brightgreen)
+![Version](https://img.shields.io/badge/Version-3.0-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
@@ -14,7 +14,7 @@ A Firefox and Chrome extension that displays the real-time operational status of
 
 ### Widget (claude.ai)
 - **Live status widget** — appears in the bottom-right corner of claude.ai
-- **Color-coded indicator** — green (operational), orange (degraded/partial outage), red (major outage), gray (unknown/maintenance)
+- **Color-coded indicator** — green (operational), yellow (degraded), orange (partial outage), red (major outage), gray (maintenance)
 - **Expandable component list** — shows the status of each individual Anthropic service
 - **Auto-refresh** — polls the official Anthropic status API at a configurable interval
 
@@ -35,10 +35,29 @@ A Firefox and Chrome extension that displays the real-time operational status of
 
 ---
 
-## What's New in v2.1
+## What's New in v3.0
 
-- **Recovery notifications** — get notified when services return to operational after an outage (gray → green from maintenance end does not trigger this)
-- **Theme button in settings** — the Dark/Light toggle is now a 🌙/☀️ icon button, consistent with the header
+### Reliability
+- **Error code system** — 7 classified error codes (TIMEOUT, NETWORK, OFFLINE, HTTP_4XX, HTTP_5XX, PARSE, UNKNOWN) with bilingual labels for clear diagnostics
+- **Exponential backoff** — auto-doubles poll interval on errors (max 10 min), resets on success
+- **Cache persistence** — last API data survives service worker restarts (up to 10 min)
+- **Fetch lock & timeout** — prevents parallel requests, 8s AbortController timeout
+- **Offline handling** — detects network state, shows last known data when offline
+
+### UI/UX
+- **WCAG AA contrast** — improved light mode text colors
+- **Yellow for degraded** — degraded performance now distinct from partial outage
+- **System theme detection** — follows OS dark/light preference by default
+- **Refresh button** — manual status refresh in popup (↻)
+- **Skeleton loading** — shimmer animation while loading
+- **Responsive widget** — adapts to small viewports
+- **Escape key** — closes dropdown menus
+
+### Developer Experience
+- **Node.js build script** — cross-platform replacement for sync.ps1 with manifest generation
+- **ESLint** — flat config with AMO compliance rules
+- **Vitest** — 27 unit tests for shared.js logic
+- **GitHub Actions CI/CD** — lint + test + build on push/PR
 
 ---
 
@@ -53,7 +72,7 @@ background.js  ←→  content.js   (widget on claude.ai)
                ←→  popup.js     (toolbar popup)
 ```
 
-The background service worker fetches and caches status data, broadcasts updates to open claude.ai tabs, and fires browser notifications when status changes.
+The background service worker fetches and caches status data, broadcasts updates to open claude.ai tabs, and fires browser notifications when status changes. Cached data persists in `chrome.storage.local` across service worker restarts. Errors are classified with specific codes for easy debugging.
 
 ---
 
@@ -100,9 +119,10 @@ Install from [addons.mozilla.org](https://addons.mozilla.org) or sideload the `.
 | Color | Meaning |
 |-------|---------|
 | 🟢 Green | All systems operational |
-| 🟠 Orange | Degraded performance or partial outage |
+| 🟡 Yellow | Degraded performance |
+| 🟠 Orange | Partial outage |
 | 🔴 Red | Major outage |
-| ⚫ Gray | Status unavailable / maintenance |
+| ⚫ Gray | Maintenance / unavailable |
 
 ---
 
@@ -110,14 +130,14 @@ Install from [addons.mozilla.org](https://addons.mozilla.org) or sideload the `.
 
 ```
 src/                                  ← shared source — edit here
-claude-status-extension-firefox-v2/  ← Firefox v2 build target
-claude-status-extension-chrome-v2/   ← Chrome v2 build target
-claude-status-extension-firefox/      ← Firefox v1 (legacy)
-dist/                                 ← packaged releases (.zip, .xpi)
-sync.ps1                              ← propagates src/ to both v2 extensions
+scripts/build.js                      ← build script (sync + manifest gen + zip)
+tests/                                ← unit tests (vitest)
+claude-status-extension-firefox-v2/   ← Firefox build target
+claude-status-extension-chrome-v2/    ← Chrome build target
+dist/                                 ← packaged releases (.zip)
 ```
 
-Only `manifest.json` in each extension folder is browser-specific. All other source files live in `src/` and are synced via `sync.ps1`.
+Edit files in `src/`, then run `npm run build` to sync to both extension directories and generate browser-specific manifests. Use `npm run build -- --zip` to also create distribution ZIPs.
 
 ---
 

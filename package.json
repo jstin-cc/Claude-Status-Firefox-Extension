@@ -1,0 +1,33 @@
+{
+  "name": "claude-status-monitor",
+  "version": "3.0.0",
+  "description": "Browser extension that displays Anthropic's real-time service status on claude.ai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:firefox": "node scripts/build.js --firefox",
+    "build:chrome": "node scripts/build.js --chrome",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "vitest": "^3.1.0"
+  },
+  "keywords": [
+    "browser-extension",
+    "chrome-extension",
+    "firefox-extension",
+    "anthropic",
+    "claude",
+    "status-monitor"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jstin-cc/claude-outage-tracker"
+  }
+}

@@ -3,17 +3,12 @@
 
   if (document.getElementById('claude-status-widget')) return;
 
-  // STATUS_COLOR, STATUS_PRIORITY, getOverallColor — from shared.js
+  // STATUS_COLOR, STATUS_PRIORITY, getOverallColor, ERROR_CODES, ERROR_LABELS,
+  // SHARED_STATUS_LABELS, CSM_CONFIG, STORAGE_KEYS, csmEl — from shared.js
 
   const LABELS = {
     de: {
-      status: {
-        major_outage: 'Komplettausfall',
-        partial_outage: 'Teilausfall',
-        degraded_performance: 'Eingeschränkt',
-        under_maintenance: 'Wartung',
-        operational: 'Betrieb normal',
-      },
+      status: SHARED_STATUS_LABELS.de,
       loading: 'Wird geladen…',
       lastChecked: (t) => `Zuletzt geprüft: ${t} Uhr`,
       error: 'Status nicht verfügbar',
@@ -21,13 +16,7 @@
       noData: 'Keine Daten verfügbar',
     },
     en: {
-      status: {
-        major_outage: 'Major Outage',
-        partial_outage: 'Partial Outage',
-        degraded_performance: 'Degraded',
-        under_maintenance: 'Maintenance',
-        operational: 'Operational',
-      },
+      status: SHARED_STATUS_LABELS.en,
       loading: 'Loading…',
       lastChecked: (t) => `Last checked: ${t}`,
       error: 'Status unavailable',
@@ -36,8 +25,13 @@
     },
   };
 
+  function getErrorLabel(code) {
+    return ERROR_LABELS[currentLang]?.[code] ?? ERROR_LABELS[currentLang]?.UNKNOWN ?? LABELS[currentLang].error;
+  }
+
   let currentLang = 'de';
-  let currentTheme = 'dark';
+  // Default to system preference
+  let currentTheme = (window.matchMedia?.('(prefers-color-scheme: light)')?.matches) ? 'light' : 'dark';
   let lastComponents = [];
 
   // ── Build widget DOM (no innerHTML — AMO compliance) ────────
@@ -84,7 +78,10 @@
   // Body
   const components = mk('div', 'csm-components');
   const timestamp  = mk('span', 'csm-timestamp');
+  timestamp.setAttribute('role', 'status');
+  timestamp.setAttribute('aria-live', 'polite');
   timestamp.textContent = 'Wird geladen…';
+  timestamp.classList.add('csm-loading');
   const link       = mk('a', 'csm-link');
   link.href = 'https://status.anthropic.com';
   link.target = '_blank';
@@ -128,12 +125,12 @@
 
   // ── Load persisted settings ─────────────────────────────────
 
-  chrome.storage.local.get(['csm-lang', 'csm-expanded', 'csm-theme'], (stored) => {
-    if (stored['csm-lang']) currentLang = stored['csm-lang'];
-    if (stored['csm-theme']) currentTheme = stored['csm-theme'];
+  chrome.storage.local.get([STORAGE_KEYS.LANG, STORAGE_KEYS.EXPANDED, STORAGE_KEYS.THEME], (stored) => {
+    if (stored[STORAGE_KEYS.LANG]) currentLang = stored[STORAGE_KEYS.LANG];
+    if (stored[STORAGE_KEYS.THEME]) currentTheme = stored[STORAGE_KEYS.THEME];
     updateLangUI();
     applyTheme(currentTheme);
-    if (stored['csm-expanded']) {
+    if (stored[STORAGE_KEYS.EXPANDED]) {
       widget.classList.add('expanded');
       chevronEl.textContent = '▾';
     }
@@ -168,16 +165,28 @@
       closeLangMenu();
       if (lang === currentLang) return;
       currentLang = lang;
-      chrome.storage.local.set({ 'csm-lang': lang });
+      chrome.storage.local.set({ [STORAGE_KEYS.LANG]: lang });
       updateLangUI();
       if (lastComponents.length) renderComponents(lastComponents);
       updateTimestamp();
     });
   });
 
-  document.addEventListener('click', closeLangMenu);
-  window.addEventListener('scroll', closeLangMenu, true);
-  window.addEventListener('resize', closeLangMenu);
+  // Use AbortController so listeners are cleaned up if the widget is removed (SPA navigation)
+  const globalAC = new AbortController();
+  document.addEventListener('click', closeLangMenu, { signal: globalAC.signal });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLangMenu(); }, { signal: globalAC.signal });
+  window.addEventListener('scroll', closeLangMenu, { capture: true, signal: globalAC.signal });
+  window.addEventListener('resize', closeLangMenu, { signal: globalAC.signal });
+
+  // Cleanup when widget is removed from DOM
+  new MutationObserver((_, obs) => {
+    if (!document.getElementById('claude-status-widget')) {
+      globalAC.abort();
+      langMenu.remove();
+      obs.disconnect();
+    }
+  }).observe(document.body, { childList: true });
 
   // ── Theme ───────────────────────────────────────────────────
 
@@ -203,7 +212,7 @@
     e.stopPropagation();
     const next = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
-    chrome.storage.local.set({ 'csm-theme': next });
+    chrome.storage.local.set({ [STORAGE_KEYS.THEME]: next });
   });
 
   function updateLangUI() {
@@ -224,7 +233,7 @@
     const expanded = widget.classList.toggle('expanded');
     chevronEl.textContent = expanded ? '▾' : '▴';
     header.setAttribute('aria-expanded', String(expanded));
-    chrome.storage.local.set({ 'csm-expanded': expanded });
+    chrome.storage.local.set({ [STORAGE_KEYS.EXPANDED]: expanded });
   });
 
   // Keyboard: Enter/Space toggle on header
@@ -252,6 +261,7 @@
       componentsEl.appendChild(makeEmpty(L.noData));
       return;
     }
+    const frag = document.createDocumentFragment();
     for (const c of visible) {
       const row = document.createElement('div');
       row.className = 'csm-component';
@@ -268,8 +278,9 @@
       st.textContent = L.status[c.status] ?? c.status;
 
       row.append(d, name, st);
-      componentsEl.appendChild(row);
+      frag.appendChild(row);
     }
+    componentsEl.appendChild(frag);
   }
 
   function updateTimestamp() {
@@ -281,32 +292,46 @@
   }
 
   function applyData(data) {
+    timestampEl.classList.remove('csm-loading');
     const comps = data.components ?? [];
     const color = getOverallColor(comps);
-    const pulse = color === 'orange' || color === 'red';
+    const pulse = color === 'orange' || color === 'red' || color === 'yellow';
     dotEl.className = `csm-dot csm-${color}${pulse ? ' csm-pulsing' : ''}`;
-    dotEl.setAttribute('aria-label', `Status: ${LABELS[currentLang].status[color === 'orange' ? 'partial_outage' : color === 'red' ? 'major_outage' : color === 'gray' ? 'under_maintenance' : 'operational'] ?? color}`);
+    dotEl.setAttribute('aria-label', `Status: ${LABELS[currentLang].status[color === 'orange' ? 'partial_outage' : color === 'yellow' ? 'degraded_performance' : color === 'red' ? 'major_outage' : color === 'gray' ? 'under_maintenance' : 'operational'] ?? color}`);
     renderComponents(comps);
     updateTimestamp();
   }
 
-  function applyError() {
+  function applyError(code) {
+    timestampEl.classList.remove('csm-loading');
+    const errorCode = code ?? 'UNKNOWN';
     dotEl.className = 'csm-dot csm-gray';
-    componentsEl.replaceChildren(makeEmpty(LABELS[currentLang].error));
-    timestampEl.textContent = LABELS[currentLang].fetchError;
+    componentsEl.replaceChildren(makeEmpty(getErrorLabel(errorCode)));
+    timestampEl.textContent = `E:${errorCode}`;
   }
 
-  function requestStatus() {
+  function requestStatus(retriesLeft) {
+    const attempt = retriesLeft ?? 1;
+    const timer = setTimeout(() => {
+      if (attempt > 0) requestStatus(0);
+      else applyError('TIMEOUT');
+    }, 5000);
+
     chrome.runtime.sendMessage({ type: 'GET_STATUS' }, (response) => {
-      if (chrome.runtime.lastError) { applyError(); return; }
+      clearTimeout(timer);
+      if (chrome.runtime.lastError) {
+        if (attempt > 0) setTimeout(() => requestStatus(0), 1000);
+        else applyError('NETWORK');
+        return;
+      }
       if (response?.type === 'STATUS_DATA') applyData(response.payload);
-      else applyError();
+      else applyError(response?.code);
     });
   }
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === 'STATUS_DATA') applyData(message.payload);
-    else if (message?.type === 'STATUS_ERROR') applyError();
+    else if (message?.type === 'STATUS_ERROR') applyError(message?.code);
   });
 
   requestStatus();

@@ -4,20 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Firefox and Chrome Manifest V3 extension that displays Anthropic's real-time service status as a widget on claude.ai. No build system, no framework dependencies — pure vanilla JavaScript and CSS.
+Firefox and Chrome Manifest V3 extension that displays Anthropic's real-time service status as a widget on claude.ai. Pure vanilla JavaScript and CSS with a Node.js-based build toolchain.
 
 ## Repository Structure
 
 ```
 src/                              ← shared source — edit here
-claude-status-extension-firefox/  ← Firefox v1 (legacy)
+scripts/build.js                  ← build script (sync + manifest gen + zip)
+tests/                            ← unit tests (vitest)
 claude-status-extension-firefox-v2/ ← Firefox v2 (build target)
 claude-status-extension-chrome-v2/  ← Chrome v2 (build target)
-dist/                             ← packaged releases (.zip, .xpi)
-sync.ps1                          ← propagates src/ to both v2 extensions
+dist/                             ← packaged releases (.zip)
+sync.ps1                          ← legacy sync (PowerShell, still works)
 ```
 
-**Workflow:** Edit files in `src/`, then run `.\sync.ps1` to sync to both extension directories. Only `manifest.json` in each extension folder is browser-specific and not overwritten by sync.
+**Workflow:** Edit files in `src/`, then run `node scripts/build.js` (or `npm run build`) to sync to both extension directories and generate manifests. Alternative: `.\sync.ps1` (PowerShell, legacy).
 
 ## Development Workflow
 
@@ -29,17 +30,25 @@ sync.ps1                          ← propagates src/ to both v2 extensions
 1. Navigate to `chrome://extensions` → Enable "Developer mode" → "Load unpacked"
 2. Select the `claude-status-extension-chrome-v2/` folder
 
-### Packaging for Distribution
-```powershell
-# Firefox v2
-Compress-Archive -Path "claude-status-extension-firefox-v2/*" -DestinationPath "dist/claude-status-monitor-2.0.zip" -Force
-
-# Chrome v2
-Compress-Archive -Path "claude-status-extension-chrome-v2/*" -DestinationPath "dist/claude-status-monitor-chrome-2.0.zip" -Force
+### Build & Package
+```bash
+npm install          # first time only
+npm run build        # sync src/ + generate manifests
+npm run build -- --zip  # also create dist/ ZIPs
+npm run build -- --firefox  # Firefox only
+npm run build -- --chrome   # Chrome only
 ```
 
-### Testing
-Manual only — no test framework. Key scenarios:
+### Linting & Testing
+```bash
+npm run lint         # ESLint on src/
+npm run lint:fix     # auto-fix
+npm test             # vitest (tests/shared.test.js)
+npm run test:watch   # watch mode
+```
+
+### Manual Testing
+Key scenarios:
 - Widget appears bottom-right on claude.ai
 - Status dot color reflects worst component status (green/orange/red/gray)
 - Expand/collapse persists across page reloads

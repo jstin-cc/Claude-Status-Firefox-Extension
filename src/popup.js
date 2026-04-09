@@ -1,6 +1,7 @@
 'use strict';
 
-// STATUS_COLOR, STATUS_PRIORITY, getOverallColor — from shared.js
+// STATUS_COLOR, STATUS_PRIORITY, getOverallColor, SHARED_STATUS_LABELS,
+// ERROR_CODES, ERROR_LABELS, CSM_CONFIG, STORAGE_KEYS, csmEl — from shared.js
 
 const LABELS = {
   de: {
@@ -30,13 +31,7 @@ const LABELS = {
       in_progress: 'Läuft',
       completed: 'Abgeschlossen',
     },
-    compStatus: {
-      major_outage: 'Komplettausfall',
-      partial_outage: 'Teilausfall',
-      degraded_performance: 'Eingeschränkt',
-      under_maintenance: 'Wartung',
-      operational: 'Betrieb normal',
-    },
+    compStatus: SHARED_STATUS_LABELS.de,
     duration: (mins) => {
       if (mins < 60) return `${mins} Min.`;
       const h = Math.floor(mins / 60);
@@ -77,13 +72,7 @@ const LABELS = {
       in_progress: 'In Progress',
       completed: 'Completed',
     },
-    compStatus: {
-      major_outage: 'Major Outage',
-      partial_outage: 'Partial Outage',
-      degraded_performance: 'Degraded',
-      under_maintenance: 'Maintenance',
-      operational: 'Operational',
-    },
+    compStatus: SHARED_STATUS_LABELS.en,
     duration: (mins) => {
       if (mins < 60) return `${mins}m`;
       const h = Math.floor(mins / 60);
@@ -100,7 +89,7 @@ const LABELS = {
 };
 
 let currentLang  = 'de';
-let currentTheme = 'dark';
+let currentTheme = (window.matchMedia?.('(prefers-color-scheme: light)')?.matches) ? 'light' : 'dark';
 let cachedResponse = null;
 
 function applyTheme(theme) {
@@ -354,7 +343,7 @@ function renderAll(summaryData, incidentsData) {
   const overallColor = activeIncidents.length > 0
     ? (activeIncidents.some((i) => i.impact === 'major') ? 'red' : 'orange')
     : getOverallColor(components);
-  const pulse = overallColor === 'red' || overallColor === 'orange';
+  const pulse = overallColor === 'red' || overallColor === 'orange' || overallColor === 'yellow';
   document.getElementById('p-dot').className = `p-dot p-${overallColor}${pulse ? ' p-pulsing' : ''}`;
 
   renderComponents(components);
@@ -383,10 +372,31 @@ function updateLangUI() {
   );
 }
 
+function getPopupErrorLabel(code) {
+  return ERROR_LABELS[currentLang]?.[code] ?? ERROR_LABELS[currentLang]?.UNKNOWN ?? LABELS[currentLang].error;
+}
+
+function showPopupError(code) {
+  const container = document.getElementById('p-components');
+  container.replaceChildren();
+  const msg = el('div', 'p-empty', getPopupErrorLabel(code));
+  container.appendChild(msg);
+
+  const dot = document.getElementById('p-dot');
+  dot.className = 'p-dot p-gray';
+
+  const ts = document.getElementById('p-timestamp');
+  ts.textContent = `E:${code}`;
+}
+
 function requestAndRender() {
   chrome.runtime.sendMessage({ type: 'GET_SUMMARY' }, (response) => {
-    if (chrome.runtime.lastError || !response) {
-      document.getElementById('p-components').textContent = LABELS[currentLang].error;
+    if (chrome.runtime.lastError) {
+      showPopupError('NETWORK');
+      return;
+    }
+    if (!response || response.error) {
+      showPopupError(response?.code ?? 'UNKNOWN');
       return;
     }
     cachedResponse = response;
@@ -396,9 +406,9 @@ function requestAndRender() {
 
 // ── Init ─────────────────────────────────────────────────────
 
-chrome.storage.local.get(['csm-lang', 'csm-theme'], (stored) => {
-  if (stored['csm-lang'])  currentLang = stored['csm-lang'];
-  if (stored['csm-theme']) applyTheme(stored['csm-theme']);
+chrome.storage.local.get([STORAGE_KEYS.LANG, STORAGE_KEYS.THEME], (stored) => {
+  if (stored[STORAGE_KEYS.LANG])  currentLang = stored[STORAGE_KEYS.LANG];
+  if (stored[STORAGE_KEYS.THEME]) applyTheme(stored[STORAGE_KEYS.THEME]);
   updateLangUI();
   document.getElementById('p-components').appendChild(
     el('div', 'p-empty', LABELS[currentLang].loading)
@@ -407,6 +417,20 @@ chrome.storage.local.get(['csm-lang', 'csm-theme'], (stored) => {
 });
 
 // ── Language switching ────────────────────────────────────────
+
+// ── Refresh button ────────────────────────────────────────────
+
+document.getElementById('p-refresh-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const btn = e.currentTarget;
+  btn.style.opacity = '0.5';
+  btn.disabled = true;
+  chrome.runtime.sendMessage({ type: 'FORCE_FETCH' }, () => {
+    requestAndRender();
+    btn.style.opacity = '1';
+    btn.disabled = false;
+  });
+});
 
 document.getElementById('p-lang-btn').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -420,7 +444,7 @@ document.querySelectorAll('.p-lang-option').forEach((opt) => {
     document.getElementById('p-lang-menu').classList.remove('open');
     if (lang === currentLang) return;
     currentLang = lang;
-    chrome.storage.local.set({ 'csm-lang': lang });
+    chrome.storage.local.set({ [STORAGE_KEYS.LANG]: lang });
     updateLangUI();
     if (cachedResponse) renderAll(cachedResponse.summary ?? {}, cachedResponse.incidents ?? {});
   });
@@ -436,13 +460,13 @@ document.getElementById('p-theme-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   const next = currentTheme === 'dark' ? 'light' : 'dark';
   applyTheme(next);
-  chrome.storage.local.set({ 'csm-theme': next });
+  chrome.storage.local.set({ [STORAGE_KEYS.THEME]: next });
 });
 
 document.getElementById('p-setting-theme-btn').addEventListener('click', () => {
   const next = currentTheme === 'dark' ? 'light' : 'dark';
   applyTheme(next);
-  chrome.storage.local.set({ 'csm-theme': next });
+  chrome.storage.local.set({ [STORAGE_KEYS.THEME]: next });
 });
 
 // ── Settings view ─────────────────────────────────────────────
@@ -494,11 +518,11 @@ function openSettings() {
   updateSettingsLabels();
 
   // Load current values
-  chrome.storage.local.get(['csm-theme', 'csm-notify', 'csm-lang', 'csm-poll-interval'], (stored) => {
-    document.getElementById('p-setting-theme-btn').textContent = (stored['csm-theme'] === 'light') ? '☀️' : '🌙';
-    document.getElementById('p-setting-notify').checked   = !!stored['csm-notify'];
-    document.getElementById('p-setting-lang').value       = stored['csm-lang'] ?? 'de';
-    document.getElementById('p-setting-interval').value   = String(stored['csm-poll-interval'] ?? '1');
+  chrome.storage.local.get([STORAGE_KEYS.THEME, STORAGE_KEYS.NOTIFY, STORAGE_KEYS.LANG, STORAGE_KEYS.INTERVAL], (stored) => {
+    document.getElementById('p-setting-theme-btn').textContent = (stored[STORAGE_KEYS.THEME] === 'light') ? '☀️' : '🌙';
+    document.getElementById('p-setting-notify').checked   = !!stored[STORAGE_KEYS.NOTIFY];
+    document.getElementById('p-setting-lang').value       = stored[STORAGE_KEYS.LANG] ?? 'de';
+    document.getElementById('p-setting-interval').value   = String(stored[STORAGE_KEYS.INTERVAL] ?? '1');
   });
 }
 
@@ -516,13 +540,13 @@ document.getElementById('p-settings-back').addEventListener('click', closeSettin
 
 
 document.getElementById('p-setting-notify').addEventListener('change', (e) => {
-  chrome.storage.local.set({ 'csm-notify': e.target.checked });
+  chrome.storage.local.set({ [STORAGE_KEYS.NOTIFY]: e.target.checked });
 });
 
 document.getElementById('p-setting-lang').addEventListener('change', (e) => {
   const lang = e.target.value;
   currentLang = lang;
-  chrome.storage.local.set({ 'csm-lang': lang });
+  chrome.storage.local.set({ [STORAGE_KEYS.LANG]: lang });
   updateLangUI();
   updateSettingsLabels();
   if (cachedResponse) renderAll(cachedResponse.summary ?? {}, cachedResponse.incidents ?? {});
@@ -530,6 +554,6 @@ document.getElementById('p-setting-lang').addEventListener('change', (e) => {
 
 document.getElementById('p-setting-interval').addEventListener('change', (e) => {
   const val = Number(e.target.value);
-  chrome.storage.local.set({ 'csm-poll-interval': val });
+  chrome.storage.local.set({ [STORAGE_KEYS.INTERVAL]: val });
   // background.js listens to storage changes and reconfigures the alarm
 });

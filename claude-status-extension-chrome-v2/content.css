@@ -12,25 +12,27 @@
   --link: #60a5fa;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --green: #22c55e;
+  --yellow: #eab308;
   --orange: #f97316;
   --red: #ef4444;
   --gray: #6b7280;
 }
 
 #claude-status-widget[data-theme="light"] {
-  /* Light (glassmorphism) */
-  --bg: rgba(255, 255, 255, 0.68);
-  --header-bg: rgba(240, 240, 238, 0.88);
+  /* Light (glassmorphism) — WCAG AA contrast ratios */
+  --bg: rgba(255, 255, 255, 0.78);
+  --header-bg: rgba(240, 240, 238, 0.92);
   --header-hover: rgba(225, 225, 222, 0.95);
-  --surface: rgba(0, 0, 0, 0.04);
-  --border: rgba(0, 0, 0, 0.1);
-  --text-primary: #111111;
-  --text-secondary: #555555;
-  --link: #2563eb;
-  --green: #16a34a;
-  --orange: #ea6c00;
-  --red: #dc2626;
-  --gray: #4b5563;
+  --surface: rgba(0, 0, 0, 0.06);
+  --border: rgba(0, 0, 0, 0.15);
+  --text-primary: #0a0a0a;
+  --text-secondary: #3d3d3d;
+  --link: #1d4ed8;
+  --green: #15803d;
+  --orange: #c2410c;
+  --yellow: #a16207;
+  --red: #b91c1c;
+  --gray: #374151;
 }
 
 /* Smooth theme transition */
@@ -133,10 +135,13 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 6px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   line-height: 1;
 }
@@ -215,6 +220,21 @@
   font-size: 12px;
 }
 
+/* ── Skeleton loading animation ──────────────── */
+@keyframes csm-shimmer {
+  0%   { opacity: 0.4; }
+  50%  { opacity: 0.7; }
+  100% { opacity: 0.4; }
+}
+
+.csm-loading {
+  animation: csm-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .csm-loading { animation: none; }
+}
+
 /* ── Footer ─────────────────────────────────── */
 #csm-footer {
   display: flex;
@@ -249,9 +269,10 @@
   flex-shrink: 0;
 }
 
-.csm-green  { background: var(--green);  box-shadow: 0 0 4px var(--green); }
-.csm-orange { background: var(--orange); box-shadow: 0 0 4px var(--orange); }
-.csm-red    { background: var(--red);    box-shadow: 0 0 4px var(--red); }
+.csm-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.csm-yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.csm-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+.csm-red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
 .csm-gray   { background: var(--gray); }
 
 /* ── Pulse animation (incidents) ─────────────── */
@@ -316,4 +337,19 @@
 
 .csm-lang-option.active {
   color: var(--link, #60a5fa);
+}
+
+/* ── Responsive ───────────────────────────────── */
+@media (max-width: 480px) {
+  #claude-status-widget {
+    bottom: 8px;
+    right: 8px;
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 800px) {
+  #claude-status-widget {
+    max-width: 280px;
+  }
 }

@@ -1,10 +1,61 @@
-# Claude Status Monitor — Änderungsprotokoll v2
+# Claude Status Monitor — Änderungsprotokoll
+
+**Stand: 2026-04-09 — v3.0 vollständig implementiert.**
+
+---
+
+## v3.0 (2026-04-09)
+
+### Stabilität & Fehlerbehandlung
+- **Fehlercode-System**: 7 klassifizierte Error-Codes (TIMEOUT, NETWORK, OFFLINE, HTTP_4XX, HTTP_5XX, PARSE, UNKNOWN) mit bilingualen Labels (DE/EN)
+- **Exponential Backoff**: Automatische Verdopplung des Poll-Intervalls bei Fehlern (max 10 Min), Reset nach Erfolg
+- **Cache-Persistenz**: Letzte API-Daten werden in `chrome.storage.local` gesichert und beim Service-Worker-Neustart wiederhergestellt (max 10 Min alt)
+- **Fetch-Lock**: Verhindert parallele API-Anfragen
+- **Fetch-Timeout**: 8s AbortController-Timeout auf alle API-Calls
+- **API-Validierung**: Prüft ob Response-Schema gültig ist (components Array)
+- **Content Script Timeout + Retry**: 5s Timeout mit 1x Retry nach 1s
+- **Offline-Handling**: Erkennt Online/Offline-Events, zeigt letzte bekannte Daten
+
+### Code-Qualität
+- **Zentralisierte Konfiguration**: `CSM_CONFIG` (API-URL, Timeouts, Limits) und `STORAGE_KEYS` in shared.js
+- **Keine Duplikate**: `getOverallColor()`, Status-Labels nur noch in shared.js
+- **DocumentFragment**: Batch-DOM-Rendering für Komponentenliste
+- **Event-Listener Cleanup**: AbortController + MutationObserver für SPA-Navigation
+- **Legacy-Ordner entfernt**: Firefox v1 und Backup-Ordner gelöscht
+
+### UI/UX
+- **WCAG AA Kontraste**: Light-Mode Textfarben angepasst (#0a0a0a / #3d3d3d)
+- **Neue Farbe für degraded_performance**: Gelb statt Orange (besser unterscheidbar)
+- **System-Theme-Detection**: `prefers-color-scheme` als Default, gespeicherter Wert überschreibt
+- **Manueller Refresh-Button**: Im Popup (↻) mit Loading-Feedback
+- **Skeleton Loading**: Shimmer-Animation beim ersten Laden
+- **Responsive Widget**: Anpassung für kleine Viewports (480px / 800px)
+- **Touch-Targets**: Min 32x32px auf allen Buttons
+- **Escape-Taste**: Schließt Dropdown-Menüs
+- **aria-live**: Screen-Reader-Unterstützung auf Timestamp
+
+### Build & Tooling
+- **package.json**: npm Scripts für build, lint, test
+- **Build-Script** (`scripts/build.js`): Plattformunabhängiger Ersatz für sync.ps1, generiert browser-spezifische Manifeste, erstellt dist/-ZIPs
+- **ESLint**: Flat Config mit AMO-Compliance-Regeln (kein innerHTML)
+- **Vitest**: 27 Unit-Tests für shared.js (Logik, Error-Codes, Labels)
+- **GitHub Actions CI/CD**: Lint + Test + Build + Artefakt-Upload bei Push/PR
+
+---
+
+## v2.1 (2026-04-02)
+
+- Recovery-Notifications bei Statusverbesserung
+- Theme-Toggle-Button im Widget-Header
+- Shared `src/`-Struktur mit `sync.ps1`
+
+---
+
+## v2.0 (2026-04-02)
 
 Dieses Dokument hält alle Änderungen von v1 → v2 fest.
-Die v1 liegt unverändert in `claude-status-extension/`.
-Die v2 wird in `claude-status-extension-v2/` entwickelt.
 
-**Stand: 2026-04-02 — Alle Schritte + Nachbesserungen abgeschlossen.**
+**Alle Schritte + Nachbesserungen abgeschlossen.**
 
 ---
 
