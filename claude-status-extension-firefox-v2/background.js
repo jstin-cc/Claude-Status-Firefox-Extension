@@ -157,7 +157,7 @@ async function fetchAll() {
   try {
     summaryJson   = await summaryRes.json();
     incidentsJson = await incidentsRes.json();
-  } catch (err) {
+  } catch (_err) {
     throw Object.assign(new Error('JSON parse failed'), { code: 'PARSE' });
   }
 

@@ -1,37 +1,58 @@
+const BROWSER_GLOBALS = {
+  window: 'readonly',
+  document: 'readonly',
+  console: 'readonly',
+  setTimeout: 'readonly',
+  clearTimeout: 'readonly',
+  setInterval: 'readonly',
+  clearInterval: 'readonly',
+  fetch: 'readonly',
+  AbortController: 'readonly',
+  MutationObserver: 'readonly',
+  URL: 'readonly',
+  self: 'readonly',
+  navigator: 'readonly',
+  chrome: 'readonly',
+  browser: 'readonly',
+  importScripts: 'readonly',
+};
+
+const SHARED_JS_GLOBALS = {
+  CSM_CONFIG: 'readonly',
+  STORAGE_KEYS: 'readonly',
+  STATUS_COLOR: 'readonly',
+  STATUS_PRIORITY: 'readonly',
+  ERROR_CODES: 'readonly',
+  ERROR_LABELS: 'readonly',
+  SHARED_STATUS_LABELS: 'readonly',
+  getOverallColor: 'readonly',
+  csmEl: 'readonly',
+};
+
 export default [
+  // shared.js defines the globals — don't treat them as pre-existing
+  {
+    files: ['src/shared.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: BROWSER_GLOBALS,
+    },
+    rules: {
+      'no-undef': 'error',
+      'no-unused-vars': 'off',
+    },
+  },
+  // All other src files consume shared.js globals
   {
     files: ['src/**/*.js'],
+    ignores: ['src/shared.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',
       globals: {
-        // Browser
-        window: 'readonly',
-        document: 'readonly',
-        console: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        fetch: 'readonly',
-        AbortController: 'readonly',
-        MutationObserver: 'readonly',
-        URL: 'readonly',
-        self: 'readonly',
-        // Extension APIs
-        chrome: 'readonly',
-        browser: 'readonly',
-        importScripts: 'readonly',
-        // shared.js globals (loaded before other scripts)
-        CSM_CONFIG: 'readonly',
-        STORAGE_KEYS: 'readonly',
-        STATUS_COLOR: 'readonly',
-        STATUS_PRIORITY: 'readonly',
-        ERROR_CODES: 'readonly',
-        ERROR_LABELS: 'readonly',
-        SHARED_STATUS_LABELS: 'readonly',
-        getOverallColor: 'readonly',
-        csmEl: 'readonly',
+        ...BROWSER_GLOBALS,
+        ...SHARED_JS_GLOBALS,
       },
     },
     rules: {
