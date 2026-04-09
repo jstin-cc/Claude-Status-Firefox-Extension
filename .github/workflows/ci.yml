@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Build & package
+        run: npm run build -- --zip
+
+      - name: Verify manifests generated
+        run: |
+          diff <(cat claude-status-extension-firefox-v2/manifest.json) /dev/null > /dev/null 2>&1 && exit 1 || true
+          grep '"version"' claude-status-extension-firefox-v2/manifest.json
+          grep '"version"' claude-status-extension-chrome-v2/manifest.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zips
+          path: dist/*.zip
+          retention-days: 30
