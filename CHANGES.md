@@ -1,6 +1,13 @@
 # Claude Status Monitor — Änderungsprotokoll
 
-**Stand: 2026-04-09 — v3.0 vollständig implementiert.**
+**Stand: 2026-04-10 — v3.1 veröffentlicht.**
+
+---
+
+## v3.1 (2026-04-10)
+
+### Bugfixes
+- **Live-Sync Theme & Sprache zwischen Popup und Widget**: Änderungen am Theme oder an der Sprache, die im Popup oder in den Einstellungen vorgenommen werden, werden jetzt sofort auf das Widget in offenen claude.ai-Tabs übertragen. Bisher lief der Sync nur in eine Richtung (Widget → Popup). Umgesetzt über einen `chrome.storage.onChanged`-Listener in `content.js`.
 
 ---
 
