@@ -145,15 +145,19 @@ function createZip(targetDir, zipName) {
   const distDir = join(ROOT, 'dist');
   mkdirSync(distDir, { recursive: true });
   const zipPath = join(distDir, zipName);
+  const sourceDir = join(ROOT, targetDir);
 
-  // Use PowerShell Compress-Archive on Windows, zip on Unix
-  const source = join(ROOT, targetDir, '*');
+  // IMPORTANT: PowerShell's Compress-Archive writes entries with backslash
+  // path separators on Windows, which causes AMO to reject the upload with:
+  //   Invalid file name in archive: icons\icon-128.png
+  // We use Python's zipfile module instead — it writes forward slashes, which
+  // is what the ZIP spec (and AMO) expect. On Unix we use the `zip` CLI.
   try {
     if (process.platform === 'win32') {
-      // Remove existing zip first (Compress-Archive doesn't overwrite by default with -Force on some versions)
-      execSync(`powershell -Command "if (Test-Path '${zipPath}') { Remove-Item '${zipPath}' }; Compress-Archive -Path '${source}' -DestinationPath '${zipPath}'"`, { stdio: 'pipe' });
+      const py = join(ROOT, 'scripts', 'make-zip.py');
+      execSync(`python "${py}" "${sourceDir}" "${zipPath}"`, { stdio: 'pipe' });
     } else {
-      execSync(`cd "${join(ROOT, targetDir)}" && zip -r "${zipPath}" .`, { stdio: 'pipe' });
+      execSync(`cd "${sourceDir}" && rm -f "${zipPath}" && zip -r "${zipPath}" .`, { stdio: 'pipe' });
     }
     console.log(`  ZIP: ${zipName}`);
   } catch (err) {

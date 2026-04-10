@@ -39,6 +39,23 @@ npm run build -- --firefox  # Firefox only
 npm run build -- --chrome   # Chrome only
 ```
 
+#### AMO upload gotcha (Windows) — DO NOT use PowerShell Compress-Archive
+On Windows, `Compress-Archive` writes ZIP entries using backslash path
+separators (e.g. `icons\icon-128.png`). AMO rejects these uploads every time
+with:
+
+```
+Invalid file name in archive: icons\icon-128.png
+```
+
+The ZIP spec requires forward slashes. `scripts/build.js` and `scripts/make-zip.py`
+handle this by using Python's `zipfile` module on Windows instead (it writes
+forward slashes). **Never** zip the extension folder manually via Explorer's
+"Send to → Compressed (zipped) folder" or `Compress-Archive` — always use
+`npm run build -- --zip` (or run `python scripts/make-zip.py <src-dir> <zip>`
+directly). This has bitten us on every AMO release, which is why the build
+script is hard-wired to Python on Windows.
+
 ### Linting & Testing
 ```bash
 npm run lint         # ESLint on src/
