@@ -334,5 +334,21 @@
     else if (message?.type === 'STATUS_ERROR') applyError(message?.code);
   });
 
+  // Sync theme + language when changed from the popup/settings
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const themeChange = changes[STORAGE_KEYS.THEME];
+    if (themeChange && themeChange.newValue && themeChange.newValue !== currentTheme) {
+      applyTheme(themeChange.newValue);
+    }
+    const langChange = changes[STORAGE_KEYS.LANG];
+    if (langChange && langChange.newValue && langChange.newValue !== currentLang) {
+      currentLang = langChange.newValue;
+      updateLangUI();
+      if (lastComponents.length) renderComponents(lastComponents);
+      updateTimestamp();
+    }
+  });
+
   requestStatus();
 })();

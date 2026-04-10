@@ -5,7 +5,7 @@ A Firefox and Chrome extension that displays the real-time operational status of
 ![Firefox](https://img.shields.io/badge/Firefox-140%2B-orange?logo=firefox)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-blue?logo=googlechrome)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue)
-![Version](https://img.shields.io/badge/Version-3.0-brightgreen)
+![Version](https://img.shields.io/badge/Version-3.1-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
@@ -32,6 +32,12 @@ A Firefox and Chrome extension that displays the real-time operational status of
 - **Bilingual** — German 🇩🇪 and English 🇺🇸, switchable in widget and popup
 - **Configurable poll interval** — 30s, 1 min, 2 min, or 5 min
 - **Persistent settings** — all preferences saved locally via `browser.storage.local`
+
+---
+
+## What's New in v3.1
+
+- **Live theme & language sync between popup and widget** — changing the theme or language in the toolbar popup (or settings view) now immediately updates the widget on open claude.ai tabs. Previously, updates only flowed from the widget to the popup.
 
 ---
 
